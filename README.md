@@ -96,83 +96,45 @@ and not 9.999999...
 
 ## Answers to the reasoning questions
 
+   file in a streaming way to lower memory use.
+  
+
 ### 1. Explain your solution approach in your own words.
 
-I read the file and check every row. Rows that are broken, duplicated or heavier than 10 kg
-are set aside and reported. For the valid deliveries, I first split them into one group per area,
-so trips never mix areas. Inside each area I sort by priority (1 first), and if the priority is the same, by ID.
+First, my program reads the CSV file and checks every row. If a row is wrong (for example, the area is missing or the weight is not a number), it skips that row and reports it.
 
-Then I build trips one by one. The most urgent delivery that is still waiting starts a new trip.
-I go down the list and add every delivery that still fits under 10 kg. The ones that don't fit stay
-for the next trip. I repeat until the area is empty. At the end I sort all trips so the trip that
-contains the most urgent delivery comes first.
+Then I group the deliveries by area, and inside each area I sort them by priority (1 is the most urgent). To build a trip, I take the most urgent delivery and then add every other delivery that still fits under 10 kg. When nothing else fits, I start a new trip. At the end I sort the trips, so the trip with the most urgent delivery goes first.
 
-I chose this because each rule in the assignment maps to one clear step, which makes it easy to
-explain and to check.
+I chose this approach because it is simple, and each rule in the assignment is one clear step in the code.
 
 ### 2. What was the most difficult part of the assignment?
 
-Deciding what to do when the rules pull in different directions. Grouping by area, handling urgent
-deliveries first, and using as few trips as possible cannot all be satisfied at once. For example, in the
-sample data mixing areas would allow 2 trips, but keeping areas separate needs 3. I decided that
-area grouping and priority order are the rules the assignment states, and that "fewest trips" is only
-something to measure, not a rule. Writing that decision down clearly was harder than writing the code.
+The most difficult part was deciding what to do when the rules conflict. Grouping by area, delivering urgent packages first and using as few trips as possible cannot always all be true at the same time. In the sample data, mixing areas would need only 2 trips, but keeping areas separate needs 3. I decided to follow the rules that the assignment states (same area together, urgent first) and to only show the "fewest trips possible" number as extra information.
 
 ### 3. Are there situations where your algorithm may not produce the best possible grouping? Explain.
 
-Yes, in three situations:
+Yes, there are three situations:
 
-- **Mixed areas are never combined.** In the sample data the total weight is 18.2 kg, so 2 trips would be
-  possible in theory, but my plan uses 3 because Maadi, Zamalek and Nasr City each get their own trip
-  with spare room. The summary line "Fewest trips possible" shows this gap.
-- **Filling a trip is a greedy choice, not the perfect one.** Take one area with weights 4, 4, 5, 6 in
-  priority order. My program makes `[4, 4]`, `[5]`, `[6]` = 3 trips, but `[4, 6]` and `[4, 5]` would need only
-  2. This is the classic bin-packing problem, which has no known fast perfect solution.
-- **A less urgent small package can travel before a more urgent heavy one.** With weights 9, 8 (both
-  priority 1) and 1 (priority 2), the program makes `[9, 1]` and `[8]`. The priority-2 package is
-  delivered before the second priority-1 package, because it fitted in the leftover space of trip 1.
-  I accepted this on purpose: the alternative (never skipping a package) wastes a lot of capacity.
-  It only ever moves a package earlier, never later, so no delivery is delayed by this.
+- **Areas are never mixed.** In the sample data the total weight is 18.2 kg, so 2 trips would be possible, but my program uses 3 because each area gets its own trip.
+- **Filling a trip is a simple choice, not always the best one.** For example, with weights 4, 4, 5, 6 in one area, my program makes [4,4], [5], [6], which is 3 trips. A better grouping is [4,6] and [4,5], which is only 2 trips.
+- **A small, less urgent package can travel before a bigger, more urgent one.** For example, with weights 9 and 8 (both priority 1) and 1 (priority 2), the program makes [9,1] and [8]. The priority 2 package goes earlier because it fits in the empty space of the first trip. I accepted this because it uses the space better, but it means the priority order is not perfectly strict.
 
 ### 4. If the input contained 1,000,000 delivery requests, what part of your solution might become slow or memory-intensive?
 
-**Slow: building the trips.** For each new trip I scan the whole list of remaining deliveries of that area.
-If there are many trips per area, the same deliveries are scanned again and again, so the time grows
-roughly with the *square* of the input size. I measured it:
+The slowest part is building the trips. For every new trip, my program goes through the list of remaining deliveries again. With a very large input and many trips, this repeats many times, so the time grows very fast. In my test with 200,000 deliveries it was already slow .
 
-| Test | Result |
-|---|---|
-| 200,000 deliveries, 50 areas, mixed weights (about 66,000 trips) | about 15 seconds |
-| 20,000 deliveries, 1 area, all heavy (6 to 9 kg, so every delivery gets its own trip) | about 23 seconds |
-
-Because of the squared growth, 1,000,000 deliveries would take minutes in the good case and possibly hours in
-the bad case. Sorting is not the problem, it is O(n log n) and fine for 1 million.
-
-**Memory-intensive:** the program loads everything at once. Each delivery is a Python object with a
-`Decimal` inside, the dictionary of area groups, the set of seen IDs and the list of trips all
-exist at the same time, which is likely several hundred MB for 1 million rows. Printing 1 million lines
-of report is also large.
+The second problem is memory. The program loads all the deliveries into memory at the same time, so 1,000,000 deliveries would use a lot of memory.
 
 ### 5. What would you improve if you had another day to work on the solution?
 
-1. **Fix the speed problem** by avoiding the repeated scanning. For example, keep a list of "open" trips
-   per area and place each delivery directly, using a sorted structure to find a trip with enough room.
-2. **Optionally combine leftover space across areas.** For example, a `--merge-areas` flag that fills
-   half-empty trips with deliveries from another area. This would need a table of which areas are
-   close to each other, otherwise the driver could get a very bad route.
-3. **Better packing.** Try "biggest first" ordering inside each priority level, and compare the
-   trip count against the theoretical minimum on random data.
-4. **Output options** such as writing the plan to a JSON or CSV file, and a JSON input option.
-5. **More tests** for very large files and unusual characters (Arabic area names), and process the
-   file in a streaming way to lower memory use.
+1. Make the trip building faster, so it does not go through the whole list again for every trip.
+2. Add an option to combine half-empty trips from different areas, but only for areas that are close to each other.
+3. Add more tests, and an option to save the result to a file (CSV or JSON).
 
 ## Extension: efficiency summary
 
-**What it is:** after the plan, the program prints how full each trip is (e.g. `5.5 / 10 kg (55% full)`),
-the average fullness, and the **fewest trips possible** (total weight ÷ capacity, rounded up),
-next to the number of trips actually used.
+After the plan, the program prints how full each trip is (for example `5.5 / 10 kg (55% full)`), the average fullness, and the fewest trips that would be possible if areas were ignored (total weight divided by 10, rounded up).
 
-**Why I chose it:** the assignment says grouping may not always be the best possible. Instead of only
-claiming that, the program shows how far from the best case each plan is. For the dispatcher it is useful
-information (many half-empty trips means extra cost), and for me it made it easy to test the trade-off
-between area grouping and the number of trips. It is small (one short function) and needs no new input data.
+I chose this because my program keeps areas separate, so it sometimes uses more trips than the minimum. This summary shows how big that difference is (in the sample data: 3 trips used, 2 possible). It is also useful for a dispatcher, because many half-empty trips cost extra time and fuel.
+
+
